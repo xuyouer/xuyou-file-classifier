@@ -2,7 +2,7 @@
 文件自动分类器
 
 功能: 自动把文件分类到对应的文件夹下
-版本: 1.0
+版本: 1.0.0
 作者: xuyou & xiaomizha
 """
 import os
@@ -18,7 +18,7 @@ from PyQt5.QtWidgets import (QApplication, QMainWindow, QVBoxLayout, QHBoxLayout
                              QFrame, QSplitter, QTabWidget, QSpinBox, QComboBox,
                              QDialog, QDialogButtonBox, QGridLayout, QFormLayout)
 from PyQt5.QtCore import Qt, QThread, pyqtSignal, QSettings
-from PyQt5.QtGui import QFont, QIcon, QPixmap, QPainter
+from PyQt5.QtGui import QFont, QIcon, QPixmap, QPainter, QCursor
 
 
 class QCollapsibleGroupBox(QGroupBox):
@@ -124,7 +124,7 @@ class AboutDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("关于")
-        self.setFixedSize(600, 420)
+        self.setFixedSize(600, 500)
         self.init_ui()
 
     def init_ui(self):
@@ -134,15 +134,19 @@ class AboutDialog(QDialog):
         header_layout = QHBoxLayout()
 
         # 程序图标
+        # icon_label = QLabel()
+        # pixmap = QPixmap(64, 64)
+        # pixmap.fill(Qt.blue)
+        # painter = QPainter(pixmap)
+        # painter.setPen(Qt.white)
+        # painter.setFont(QFont("Arial", 20, QFont.Bold))
+        # painter.drawText(pixmap.rect(), Qt.AlignCenter, "FC")
+        # painter.end()
+        # icon_label.setPixmap(pixmap)
+        # header_layout.addWidget(icon_label)
         icon_label = QLabel()
-        pixmap = QPixmap(64, 64)
-        pixmap.fill(Qt.blue)
-        painter = QPainter(pixmap)
-        painter.setPen(Qt.white)
-        painter.setFont(QFont("Arial", 20, QFont.Bold))
-        painter.drawText(pixmap.rect(), Qt.AlignCenter, "FC")
-        painter.end()
-        icon_label.setPixmap(pixmap)
+        icon_pixmap = QPixmap("icon.png").scaled(128, 128, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+        icon_label.setPixmap(icon_pixmap)
         header_layout.addWidget(icon_label)
 
         # 程序信息
@@ -150,16 +154,12 @@ class AboutDialog(QDialog):
         title_label = QLabel("文件自动分类器")
         title_label.setFont(QFont("Arial", 16, QFont.Bold))
         info_layout.addWidget(title_label)
-
         desc_label = QLabel("自动将文件按类型分类到对应文件夹的实用工具")
         info_layout.addWidget(desc_label)
-
-        version_label = QLabel("版本: 1.0")
+        version_label = QLabel("版本: 1.0.0")
         info_layout.addWidget(version_label)
-
         header_layout.addLayout(info_layout)
         header_layout.addStretch()
-
         layout.addLayout(header_layout)
 
         # 中部链接区域
@@ -168,35 +168,34 @@ class AboutDialog(QDialog):
 
         # 创建链接按钮
         donate_btn = QPushButton("💰 捐赠")
+        donate_btn.setCursor(QCursor(Qt.PointingHandCursor))
         donate_btn.clicked.connect(lambda: webbrowser.open("https://github.com/xuyouer/"))
         links_layout.addWidget(donate_btn, 0, 0)
-
         contact_btn = QPushButton("📧 联系")
+        contact_btn.setCursor(QCursor(Qt.PointingHandCursor))
         contact_btn.clicked.connect(lambda: webbrowser.open("https://github.com/xuyouer/"))
         links_layout.addWidget(contact_btn, 0, 1)
-
         homepage_btn = QPushButton("🏠 首页")
+        homepage_btn.setCursor(QCursor(Qt.PointingHandCursor))
         homepage_btn.clicked.connect(lambda: webbrowser.open("https://github.com/xuyouer/"))
         links_layout.addWidget(homepage_btn, 1, 0)
-
         repo_btn = QPushButton("📦 开源仓库")
+        repo_btn.setCursor(QCursor(Qt.PointingHandCursor))
         repo_btn.clicked.connect(lambda: webbrowser.open("https://github.com/xuyouer/xuyou-file-classifier"))
         links_layout.addWidget(repo_btn, 1, 1)
-
         author_layout = QHBoxLayout()
         author_label = QLabel("👥 作者: ")
         author_layout.addWidget(author_label)
-
         xuyou_btn = QPushButton("xuyou")
         xuyou_btn.setStyleSheet("QPushButton { border: none; color: blue; text-decoration: underline; }")
+        xuyou_btn.setCursor(QCursor(Qt.PointingHandCursor))
         xuyou_btn.clicked.connect(lambda: webbrowser.open("https://github.com/xuyouer/"))
         author_layout.addWidget(xuyou_btn)
-
         and_label = QLabel("&")
         author_layout.addWidget(and_label)
-
         xiaomizha_btn = QPushButton("xiaomizha")
         xiaomizha_btn.setStyleSheet("QPushButton { border: none; color: blue; text-decoration: underline; }")
+        xiaomizha_btn.setCursor(QCursor(Qt.PointingHandCursor))
         xiaomizha_btn.clicked.connect(lambda: webbrowser.open("https://github.com/xuyouer/"))
         author_layout.addWidget(xiaomizha_btn)
 
@@ -228,7 +227,7 @@ class RuleEditDialog(QDialog):
     def __init__(self, category="", extensions="", parent=None, edit_mode=False):
         super().__init__(parent)
         self.setWindowTitle("编辑规则" if edit_mode else "添加规则")
-        self.setFixedSize(400, 200)
+        self.setFixedSize(650, 200)
         self.edit_mode = edit_mode
         self.init_ui()
 
@@ -244,7 +243,7 @@ class RuleEditDialog(QDialog):
         layout.addRow("分类名称:", self.category_input)
 
         self.extensions_input = QLineEdit()
-        self.extensions_input.setPlaceholderText("例: doc,docx,pdf(用逗号分隔)")
+        self.extensions_input.setPlaceholderText("例: doc,docx,pdf (用逗号分隔)")
         layout.addRow("文件扩展名:", self.extensions_input)
 
         buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
@@ -797,7 +796,7 @@ class FileClassifierGUI(QMainWindow):
 
     def init_ui(self):
         """初始化用户界面"""
-        self.setWindowTitle("文件自动分类器 v1.0")
+        self.setWindowTitle("文件自动分类器 v1.0.0")
         self.setGeometry(0, 0, 800, 900)
 
         # 创建中央窗口部件
@@ -1355,7 +1354,7 @@ class FileClassifierGUI(QMainWindow):
             rule_text = f"📁 {category}: {', '.join(sorted(extensions))}"
             rule_label = QLabel(rule_text)
             rule_label.setWordWrap(True)
-            rule_label.setStyleSheet("padding: 5px; border: 1px solid #ddd; border-radius: 3px; margin: 2px;")
+            rule_label.setStyleSheet("padding: 5px; border: 1px solid #ddd; border-radius: 4px; margin: 2px;")
             self.preview_layout.addWidget(rule_label)
 
     def browse_directory(self):
@@ -1522,7 +1521,7 @@ def main():
 
     # 设置应用程序信息
     app.setApplicationName("文件自动分类器")
-    app.setApplicationVersion("1.0")
+    app.setApplicationVersion("1.0.0")
     app.setOrganizationName("xuyou & xiaomizha")
 
     window = FileClassifierGUI()
