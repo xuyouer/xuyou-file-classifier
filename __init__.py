@@ -2,7 +2,7 @@
 文件自动分类器
 
 功能: 自动把文件分类到对应的文件夹下
-版本: 1.0.1
+版本: 1.0.2
 作者: xuyou & xiaomizha
 """
 import os
@@ -30,30 +30,50 @@ class SettingsManager:
     def __init__(self):
         self.settings = QSettings("FileClassifier", "Settings")
         self._load_default_settings()
+        # 初次启动
+        if not self.settings.allKeys():
+            self.reset_to_defaults()
 
     def _load_default_settings(self):
         """加载默认设置"""
         self.default_settings = {
-            # 常规设置
-            'auto_save': True,
+            ## 常规设置
+            # 自动保存程序设置
+            'auto_save_settings': True,
+            # 安全操作
             'confirm_action': True,
+            # 日志等级
             'log_level': '详细',
 
-            # 界面设置
+            ## 界面设置
+            # 主题
             'theme': '默认',
+            # 字体大小
             'font_size': 10,
+            # 最大日志行数
+            'max_log_lines': 5000,
 
-            # 分类设置
+            ## 分类设置
+            # 默认输出路径
             'default_output_pattern': './{date}_{id}_分类',
+            # 是否移动文件
             'move_files': True,
-            'recursive': False,
+            # 是否递归处理子文件夹
+            'recursive': True,
+            # 是否保持原有子目录结构
             'preserve_structure': True,
+            # 是否清空源文件夹
             'remove_empty_folders': False,
+            # 是否排除输出路径
             'exclude_output_dirs': True,
+            # 分类前备份源文件并校验
+            'backup_and_verify_source': False,
 
-            # 高级设置
+            ## 高级设置
+            # 自动保存分类规则
+            'auto_save_rules': True,
+            # 备份分类规则
             'backup_rules': True,
-            'max_log_lines': 1000,
         }
 
     def get(self, key, default=None):
@@ -83,6 +103,7 @@ class SettingsManager:
 
 class QCollapsibleGroupBox(QGroupBox):
     """可折叠的GroupBox"""
+
     # 分类名, 是否启用
     rule_toggled = pyqtSignal(str, bool)
 
@@ -107,6 +128,8 @@ class QCollapsibleGroupBox(QGroupBox):
 class SettingsDialog(QDialog):
     """设置对话框"""
 
+    defaults_reset_signal = pyqtSignal()
+
     def __init__(self, settings_manager, parent=None):
         super().__init__(parent)
         self.settings_manager = settings_manager
@@ -122,28 +145,14 @@ class SettingsDialog(QDialog):
         # 常规设置
         general_tab = QWidget()
         general_layout = QFormLayout(general_tab)
-        self.auto_save_cb = QCheckBox("自动保存分类规则")
-        general_layout.addRow("数据持久化:", self.auto_save_cb)
-        self.confirm_action_cb = QCheckBox("执行操作前确认")
+        self.auto_save_settings_cb = QCheckBox("自动保存程序设置 (如UI选项)")
+        general_layout.addRow("自动保存:", self.auto_save_settings_cb)
+        self.confirm_action_cb = QCheckBox("执行分类等危险操作前进行确认")
         general_layout.addRow("安全设置:", self.confirm_action_cb)
         self.log_level_combo = QComboBox()
         self.log_level_combo.addItems(["简洁", "详细", "调试"])
         general_layout.addRow("日志级别:", self.log_level_combo)
-        self.exclude_output_cb = QCheckBox("排除输出目录, 防止重复分类")
-        general_layout.addRow("智能排除:", self.exclude_output_cb)
         tab_widget.addTab(general_tab, "常规")
-
-        # 分类设置
-        classify_tab = QWidget()
-        classify_layout = QFormLayout(classify_tab)
-        self.output_pattern_input = QLineEdit()
-        self.output_pattern_input.setPlaceholderText("./{date}_{id}_分类")
-        classify_layout.addRow("输出路径模式:", self.output_pattern_input)
-        self.preserve_structure_cb = QCheckBox("保持原有子目录结构")
-        classify_layout.addRow("目录结构:", self.preserve_structure_cb)
-        self.remove_empty_folders_cb = QCheckBox("分类后删除空文件夹")
-        classify_layout.addRow("清理选项:", self.remove_empty_folders_cb)
-        tab_widget.addTab(classify_tab, "分类")
 
         # 界面设置
         ui_tab = QWidget()
@@ -159,6 +168,36 @@ class SettingsDialog(QDialog):
         self.max_log_lines_spin.setSuffix(" 行")
         ui_layout.addRow("最大日志行数:", self.max_log_lines_spin)
         tab_widget.addTab(ui_tab, "界面")
+
+        # 分类设置
+        classify_tab = QWidget()
+        classify_layout = QFormLayout(classify_tab)
+        self.output_pattern_input = QLineEdit()
+        self.output_pattern_input.setPlaceholderText("./{date}_{id}_分类")
+        classify_layout.addRow("输出路径模式:", self.output_pattern_input)
+        self.move_files_cb = QCheckBox("移动文件 (取消则为复制)")
+        classify_layout.addRow("文件操作:", self.move_files_cb)
+        self.recursive_cb = QCheckBox("包含子文件夹 (递归处理)")
+        classify_layout.addRow("递归处理:", self.recursive_cb)
+        self.preserve_structure_cb = QCheckBox("保持原有子目录结构")
+        classify_layout.addRow("目录结构:", self.preserve_structure_cb)
+        self.remove_empty_folders_cb = QCheckBox("分类后删除空文件夹")
+        classify_layout.addRow("清理选项:", self.remove_empty_folders_cb)
+        self.exclude_output_cb = QCheckBox("排除输出目录, 防止重复分类")
+        classify_layout.addRow("智能排除:", self.exclude_output_cb)
+        self.backup_and_verify_cb = QCheckBox("分类前备份源文件并进行校验 (更安全)")
+        classify_layout.addRow("安全与校验:", self.backup_and_verify_cb)
+        tab_widget.addTab(classify_tab, "分类")
+
+        # 高级设置
+        advanced_tab = QWidget()
+        advanced_layout = QFormLayout(advanced_tab)
+        self.auto_save_rules_cb = QCheckBox("自动保存分类规则的变更")
+        advanced_layout.addRow("规则保存:", self.auto_save_rules_cb)
+        self.backup_rules_cb = QCheckBox("备份分类规则")
+        advanced_layout.addRow("规则备份:", self.backup_rules_cb)
+        tab_widget.addTab(advanced_tab, "高级")
+
         layout.addWidget(tab_widget)
 
         button_layout = QHBoxLayout()
@@ -174,18 +213,24 @@ class SettingsDialog(QDialog):
 
     def load_settings(self):
         """加载设置"""
-        self.auto_save_cb.setChecked(self.settings_manager.get_bool('auto_save'))
+        self.auto_save_settings_cb.setChecked(self.settings_manager.get_bool('auto_save_settings'))
         self.confirm_action_cb.setChecked(self.settings_manager.get_bool('confirm_action'))
         self.log_level_combo.setCurrentText(self.settings_manager.get('log_level'))
-        self.exclude_output_cb.setChecked(self.settings_manager.get_bool('exclude_output_dirs'))
-
-        self.output_pattern_input.setText(self.settings_manager.get('default_output_pattern'))
-        self.preserve_structure_cb.setChecked(self.settings_manager.get_bool('preserve_structure'))
-        self.remove_empty_folders_cb.setChecked(self.settings_manager.get_bool('remove_empty_folders'))
 
         self.theme_combo.setCurrentText(self.settings_manager.get('theme'))
         self.font_size_spin.setValue(self.settings_manager.get_int('font_size'))
         self.max_log_lines_spin.setValue(self.settings_manager.get_int('max_log_lines'))
+
+        self.output_pattern_input.setText(self.settings_manager.get('default_output_pattern'))
+        self.move_files_cb.setChecked(self.settings_manager.get_bool('move_files'))
+        self.recursive_cb.setChecked(self.settings_manager.get_bool('recursive'))
+        self.preserve_structure_cb.setChecked(self.settings_manager.get_bool('preserve_structure'))
+        self.remove_empty_folders_cb.setChecked(self.settings_manager.get_bool('remove_empty_folders'))
+        self.exclude_output_cb.setChecked(self.settings_manager.get_bool('exclude_output_dirs'))
+        self.backup_and_verify_cb.setChecked(self.settings_manager.get_bool('backup_and_verify_source'))
+
+        self.auto_save_rules_cb.setChecked(self.settings_manager.get_bool('auto_save_rules'))
+        self.backup_rules_cb.setChecked(self.settings_manager.get_bool('backup_rules'))
 
     def reset_defaults(self):
         """重置为默认设置"""
@@ -198,22 +243,29 @@ class SettingsDialog(QDialog):
         if reply == QMessageBox.Yes:
             self.settings_manager.reset_to_defaults()
             self.load_settings()
+            self.defaults_reset_signal.emit()
             QMessageBox.information(self, "重置完成", "所有设置已重置为默认值")
 
     def accept(self):
         """保存设置"""
-        self.settings_manager.set('auto_save', self.auto_save_cb.isChecked())
+        self.settings_manager.set('auto_save_settings', self.auto_save_settings_cb.isChecked())
         self.settings_manager.set('confirm_action', self.confirm_action_cb.isChecked())
         self.settings_manager.set('log_level', self.log_level_combo.currentText())
-        self.settings_manager.set('exclude_output_dirs', self.exclude_output_cb.isChecked())
-
-        self.settings_manager.set('default_output_pattern', self.output_pattern_input.text())
-        self.settings_manager.set('preserve_structure', self.preserve_structure_cb.isChecked())
-        self.settings_manager.set('remove_empty_folders', self.remove_empty_folders_cb.isChecked())
 
         self.settings_manager.set('theme', self.theme_combo.currentText())
         self.settings_manager.set('font_size', self.font_size_spin.value())
         self.settings_manager.set('max_log_lines', self.max_log_lines_spin.value())
+
+        self.settings_manager.set('default_output_pattern', self.output_pattern_input.text())
+        self.settings_manager.set('move_files', self.move_files_cb.isChecked())
+        self.settings_manager.set('recursive', self.recursive_cb.isChecked())
+        self.settings_manager.set('preserve_structure', self.preserve_structure_cb.isChecked())
+        self.settings_manager.set('remove_empty_folders', self.remove_empty_folders_cb.isChecked())
+        self.settings_manager.set('exclude_output_dirs', self.exclude_output_cb.isChecked())
+        self.settings_manager.set('backup_and_verify_source', self.backup_and_verify_cb.isChecked())
+
+        self.settings_manager.set('auto_save_rules', self.auto_save_rules_cb.isChecked())
+        self.settings_manager.set('backup_rules', self.backup_rules_cb.isChecked())
 
         super().accept()
 
@@ -246,7 +298,7 @@ class AboutDialog(QDialog):
         info_layout.addWidget(title_label)
         desc_label = QLabel("自动将文件按类型分类到对应文件夹的实用工具")
         info_layout.addWidget(desc_label)
-        version_label = QLabel("版本: 1.0.1")
+        version_label = QLabel("版本: 1.0.2")
         info_layout.addWidget(version_label)
         features_label = QLabel("✓ YAML配置格式\n✓ 智能路径管理\n✓ 结构保持选项\n✓ 空文件夹清理")
         info_layout.addWidget(features_label)
@@ -780,7 +832,7 @@ class FileClassifier:
                 'categories': self.categories,
                 'output_dirs_history': list(self.output_dirs_history),
                 'metadata': {
-                    'version': '1.0.1',
+                    'version': '1.0.2',
                     'created': datetime.now().isoformat(),
                     'disabled_categories': list(self.disabled_categories)
                 }
@@ -837,7 +889,7 @@ class FileClassifier:
             pass
 
     def classify_files(self, src_dir, output_dir=None, move_files=True, callback=None,
-                       recursive=False, preserve_structure=None):
+                       recursive=False, preserve_structure=None, backup_and_verify=False):
         """
         分类文件
 
@@ -848,9 +900,10 @@ class FileClassifier:
             callback: 进度回调函数
             recursive: 是否递归处理子文件夹
             preserve_structure: 是否保持目录结构
+            backup_and_verify: 是否备份和校验
 
         Returns:
-            tuple: (成功数量, 失败列表, 总数量, 输出目录)
+            tuple: (成功数量, 失败列表, 总数量, 输出目录, 备份目录, 校验结果)
         """
         if not os.path.exists(src_dir):
             raise ValueError(f"目录不存在: {src_dir}")
@@ -862,6 +915,7 @@ class FileClassifier:
         os.makedirs(output_dir, exist_ok=True)
         if preserve_structure is None:
             preserve_structure = self.settings_manager.get_bool('preserve_structure')
+
         # 获取所有文件
         all_files = []
         if recursive:
@@ -885,7 +939,28 @@ class FileClassifier:
         total_files = len(all_files)
         success_count = 0
         failed_files = []
+        # 记录成功的操作
+        successful_ops = {}
+        backup_path = None
 
+        # 备份
+        if backup_and_verify and total_files > 0:
+            try:
+                timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+                backup_path = os.path.join(output_dir, f"_backup_{timestamp}")
+                os.makedirs(backup_path, exist_ok=True)
+                self._log(f"开始备份 {total_files} 个文件到: {backup_path}")
+                for file_path, _, rel_path in all_files:
+                    backup_dest_dir = os.path.dirname(os.path.join(backup_path, rel_path))
+                    os.makedirs(backup_dest_dir, exist_ok=True)
+                    shutil.copy2(file_path, os.path.join(backup_path, rel_path))
+                self._log("文件备份完成")
+            except Exception as e:
+                self._log(f"错误: 文件备份失败: {e}")
+                # 备份失败，可以选择停止操作
+                raise IOError(f"文件备份失败: {e}")
+
+        # 分类
         for i, (file_path, filename, rel_path) in enumerate(all_files):
             try:
                 # 获取文件分类
@@ -925,6 +1000,7 @@ class FileClassifier:
                     else:
                         shutil.copy2(file_path, dst_file)
 
+                    successful_ops[dst_file] = file_path
                     success_count += 1
                 else:
                     failed_files.append(f"无法识别: {rel_path}")
@@ -936,20 +1012,43 @@ class FileClassifier:
             if callback:
                 callback(i + 1, total_files, rel_path)
 
+        # 校验
+        verification_passed = None
+        if backup_and_verify and total_files > 0:
+            self._log("开始校验分类结果...")
+            errors = 0
+            for dst_file, src_file in successful_ops.items():
+                if not os.path.exists(dst_file):
+                    errors += 1
+                    self._log(f"校验失败: 目标文件不存在 {dst_file}")
+                if move_files and os.path.exists(src_file):
+                    errors += 1
+                    self._log(f"校验失败: 源文件未被移动 {src_file}")
+
+            if errors == 0:
+                verification_passed = True
+                self._log(f"校验成功: {len(successful_ops)} 个文件的操作已确认")
+            else:
+                verification_passed = False
+                self._log(f"校验失败: 发现 {errors} 个错误, 详情请查看日志")
+
         # 清理空文件夹
         if move_files and self.settings_manager.get_bool('remove_empty_folders'):
             self.remove_empty_folders(src_dir)
-        return success_count, failed_files, total_files, output_dir
+
+        return success_count, failed_files, total_files, output_dir, backup_path, verification_passed
 
 
 class ClassificationThread(QThread):
     """文件分类线程"""
 
-    progress_updated = pyqtSignal(int, int, str)  # 当前进度, 总数, 当前文件
-    classification_finished = pyqtSignal(int, list, int, str)  # 成功数, 失败列表, 总数, 输出目录
+    # 当前进度, 总数, 当前文件
+    progress_updated = pyqtSignal(int, int, str)
+    # 成功数, 失败列表, 总数, 输出目录, 备份目录, 校验结果
+    classification_finished = pyqtSignal(int, list, int, str, object, object)
 
     def __init__(self, classifier, src_dir, output_dir=None, move_files=True,
-                 recursive=False, preserve_structure=None):
+                 recursive=False, preserve_structure=None, backup_and_verify=False):
         super().__init__()
         self.classifier = classifier
         self.src_dir = src_dir
@@ -957,21 +1056,23 @@ class ClassificationThread(QThread):
         self.move_files = move_files
         self.recursive = recursive
         self.preserve_structure = preserve_structure
+        self.backup_and_verify = backup_and_verify
 
     def run(self):
         """运行分类任务"""
         try:
-            success_count, failed_files, total_files, output_dir = self.classifier.classify_files(
+            success, failed, total, out_dir, backup_dir, verified = self.classifier.classify_files(
                 self.src_dir,
                 output_dir=self.output_dir,
                 move_files=self.move_files,
                 callback=self.progress_callback,
                 recursive=self.recursive,
-                preserve_structure=self.preserve_structure
+                preserve_structure=self.preserve_structure,
+                backup_and_verify=self.backup_and_verify
             )
-            self.classification_finished.emit(success_count, failed_files, total_files, output_dir)
+            self.classification_finished.emit(success, failed, total, out_dir, backup_dir, verified)
         except Exception as e:
-            self.classification_finished.emit(0, [f"错误: {str(e)}"], 0)
+            self.classification_finished.emit(0, [f"严重错误: {str(e)}"], 0, "", None, None)
 
     def progress_callback(self, current, total, filename):
         """进度回调"""
@@ -1004,7 +1105,7 @@ class FileClassifierGUI(QMainWindow):
 
     def init_ui(self):
         """初始化用户界面"""
-        self.setWindowTitle("文件自动分类器 v1.0.1")
+        self.setWindowTitle("文件自动分类器 v1.0.2")
         self.setGeometry(0, 0, 850, 1000)
         self.setMaximumWidth(850)
         central_widget = QWidget()
@@ -1058,10 +1159,17 @@ class FileClassifierGUI(QMainWindow):
         self.recursive_cb = QCheckBox("包含子文件夹 (递归处理)")
         self.preserve_structure_cb = QCheckBox("保持原有目录结构")
         self.remove_empty_folders_cb = QCheckBox("清理源目录中的空文件夹 (仅移动时有效)")
+        self.backup_and_verify_cb = QCheckBox("备份并校验源文件 (更安全)")
+        self.move_files_cb.stateChanged.connect(self.save_settings)
+        self.recursive_cb.stateChanged.connect(self.save_settings)
+        self.preserve_structure_cb.stateChanged.connect(self.save_settings)
+        self.remove_empty_folders_cb.stateChanged.connect(self.save_settings)
+        self.backup_and_verify_cb.stateChanged.connect(self.save_settings)
         options_layout.addWidget(self.move_files_cb, 0, 0)
         options_layout.addWidget(self.recursive_cb, 0, 1)
         options_layout.addWidget(self.preserve_structure_cb, 1, 0)
         options_layout.addWidget(self.remove_empty_folders_cb, 1, 1)
+        options_layout.addWidget(self.backup_and_verify_cb, 2, 0)
         basic_layout.addWidget(options_group)
         basic_layout.addStretch()
 
@@ -1186,10 +1294,20 @@ class FileClassifierGUI(QMainWindow):
         self.recursive_cb.setChecked(self.settings_manager.get_bool('recursive'))
         self.preserve_structure_cb.setChecked(self.settings_manager.get_bool('preserve_structure'))
         self.remove_empty_folders_cb.setChecked(self.settings_manager.get_bool('remove_empty_folders'))
+        self.backup_and_verify_cb.setChecked(self.settings_manager.get_bool('backup_and_verify_source'))
         font = self.font()
         font.setPointSize(self.settings_manager.get_int('font_size'))
         self.setFont(font)
         self.log_text.document().setMaximumBlockCount(self.settings_manager.get_int('max_log_lines'))
+
+    def save_settings(self):
+        """保存UI设置"""
+        self.settings_manager.set('move_files', self.move_files_cb.isChecked())
+        self.settings_manager.set('recursive', self.recursive_cb.isChecked())
+        self.settings_manager.set('preserve_structure', self.preserve_structure_cb.isChecked())
+        self.settings_manager.set('remove_empty_folders', self.remove_empty_folders_cb.isChecked())
+        self.settings_manager.set('backup_and_verify_source', self.backup_and_verify_cb.isChecked())
+        self.settings_manager.settings.sync()
 
     def save_log(self):
         """保存日志到文件"""
@@ -1261,6 +1379,7 @@ class FileClassifierGUI(QMainWindow):
     def open_settings(self):
         """打开设置对话框"""
         dialog = SettingsDialog(self.settings_manager, self)
+        dialog.defaults_reset_signal.connect(self.apply_settings)
         if dialog.exec_() == QDialog.Accepted:
             self.apply_settings()
             QMessageBox.information(self, "设置", "设置已保存并应用")
@@ -1295,8 +1414,7 @@ class FileClassifierGUI(QMainWindow):
                     data = yaml.safe_load(f)
                     imported_rules = data.get('categories', {})
                 self.classifier.categories.update(imported_rules)
-                if self.settings_manager.get_bool('auto_save'):
-                    self.classifier.save_rules()
+                if self.settings_manager.get_bool('auto_save_rules'): self.classifier.save_rules()
                 self.update_rules_management()
                 self.update_rules_preview()
                 QMessageBox.information(self, "导入成功", f"成功导入 {len(imported_rules)} 条规则")
@@ -1372,7 +1490,7 @@ class FileClassifierGUI(QMainWindow):
         )
         if reply == QMessageBox.Yes:
             self.classifier.categories.clear()
-            if self.settings_manager.get_bool('auto_save'): self.classifier.save_rules()
+            if self.settings_manager.get_bool('auto_save_rules'): self.classifier.save_rules()
             self.update_rules_management()
             self.update_rules_preview()
             QMessageBox.information(self, "清空完成", "所有规则已清空")
@@ -1399,7 +1517,7 @@ class FileClassifierGUI(QMainWindow):
         )
         if reply == QMessageBox.Yes:
             self.classifier.categories = self.classifier.default_categories.copy()
-            if self.settings_manager.get_bool('auto_save'): self.classifier.save_rules()
+            if self.settings_manager.get_bool('auto_save_rules'): self.classifier.save_rules()
             self.update_rules_management()
             self.update_rules_preview()
             QMessageBox.information(self, "重置完成", "规则已重置为默认设置")
@@ -1435,6 +1553,7 @@ class FileClassifierGUI(QMainWindow):
             button_layout = QHBoxLayout()
             edit_btn = QPushButton("编辑")
             edit_btn.clicked.connect(lambda checked, c=category, e=ext_text: self.edit_rule(c, e))
+            edit_btn.setStyleSheet("QPushButton { background-color: #212121; color: white; }")
             button_layout.addWidget(edit_btn)
             delete_btn = QPushButton("删除")
             delete_btn.clicked.connect(lambda checked, c=category: self.delete_category(c))
@@ -1538,6 +1657,40 @@ class FileClassifierGUI(QMainWindow):
         if directory:
             self.output_dir_input.setText(directory)
 
+    def _get_files_to_classify(self, src_dir, recursive):
+        """获取分类的文件列表"""
+        files_to_check = []
+        if self.settings_manager.get_bool('exclude_output_dirs'):
+            # 启用排除选项
+            if recursive:
+                for root, dirs, files in os.walk(src_dir):
+                    if self.classifier.is_output_directory(root):
+                        dirs[:] = []
+                        continue
+                    for file in files:
+                        files_to_check.append(os.path.join(root, file))
+            else:
+                # 只遍历当前目录
+                for f_name in os.listdir(src_dir):
+                    file_path = os.path.join(src_dir, f_name)
+                    if self.classifier.is_output_directory(file_path):
+                        continue
+                    if os.path.isfile(file_path):
+                        files_to_check.append(file_path)
+        else:
+            # 未启用排除选项
+            if recursive:
+                for root, _, files in os.walk(src_dir):
+                    for file in files:
+                        files_to_check.append(os.path.join(root, file))
+            else:
+                for f_name in os.listdir(src_dir):
+                    file_path = os.path.join(src_dir, f_name)
+                    if os.path.isfile(file_path):
+                        files_to_check.append(file_path)
+
+        return files_to_check
+
     def start_classification(self):
         """开始文件分类"""
         src_dir = self.dir_input.text().strip()
@@ -1551,26 +1704,31 @@ class FileClassifierGUI(QMainWindow):
             return
 
         # 获取选项
-        recursive = self.recursive_cb.isChecked()
-        preserve_structure = self.preserve_structure_cb.isChecked()
+        # recursive = self.recursive_cb.isChecked()
+        # preserve_structure = self.preserve_structure_cb.isChecked()
+        # backup_and_verify = self.backup_and_verify_cb.isChecked()
+        recursive = self.settings_manager.get_bool('recursive')
+        preserve_structure = self.settings_manager.get_bool('preserve_structure')
+        backup_and_verify = self.settings_manager.get_bool('backup_and_verify_source')
 
         # 检查目录中是否有文件
-        if recursive:
-            # 递归检查所有子目录
-            files = []
-            for root, dirs, file_list in os.walk(src_dir):
-                files.extend([os.path.join(root, f) for f in file_list])
-        else:
-            # 只检查当前目录
-            files = [f for f in os.listdir(src_dir)
-                     if os.path.isfile(os.path.join(src_dir, f))]
-
+        # if recursive:
+        #     # 递归检查所有子目录
+        #     files = []
+        #     for root, dirs, file_list in os.walk(src_dir):
+        #         files.extend([os.path.join(root, f) for f in file_list])
+        # else:
+        #     # 只检查当前目录
+        #     files = [f for f in os.listdir(src_dir)
+        #              if os.path.isfile(os.path.join(src_dir, f))]
+        files = self._get_files_to_classify(src_dir, recursive)
         if not files:
             QMessageBox.information(self, "信息", "选择的目录中没有文件需要分类")
             return
 
         # 确认操作
-        move_files = self.move_files_cb.isChecked()
+        # move_files = self.move_files_cb.isChecked()
+        move_files = self.settings_manager.get_bool('move_files')
         action = "移动" if move_files else "复制"
         recursive_text = "(包含子文件夹)" if recursive else ""
 
@@ -1603,7 +1761,7 @@ class FileClassifierGUI(QMainWindow):
 
         # 创建并启动分类线程
         self.classification_thread = ClassificationThread(
-            self.classifier, src_dir, output_dir, move_files, recursive, preserve_structure
+            self.classifier, src_dir, output_dir, move_files, recursive, preserve_structure, backup_and_verify
         )
         self.classification_thread.progress_updated.connect(self.update_progress)
         self.classification_thread.classification_finished.connect(self.classification_complete)
@@ -1628,7 +1786,7 @@ class FileClassifierGUI(QMainWindow):
             if self.settings_manager.get('log_level') in ["详细", "调试"]:
                 self.log_text.append(f"处理文件: {filename}")
 
-    def classification_complete(self, success_count, failed_files, total_files, output_dir):
+    def classification_complete(self, success_count, failed_files, total_files, output_dir, backup_dir, verified):
         """分类完成"""
         self.reset_ui_state()
 
@@ -1636,6 +1794,10 @@ class FileClassifierGUI(QMainWindow):
         self.log_text.append("-" * 50)
         self.log_text.append(f"分类完成")
         self.log_text.append(f"文件已分类至: {output_dir}")
+        if backup_dir:
+            self.log_text.append(f"文件已备份至: {backup_dir}")
+        if verified is not None:
+            self.log_text.append(f"校验结果: {'成功' if verified else '失败'}")
         self.log_text.append(f"总文件数: {total_files}")
         self.log_text.append(f"成功分类: {success_count}")
         self.log_text.append(f"失败数量: {len(failed_files)}")
@@ -1648,7 +1810,7 @@ class FileClassifierGUI(QMainWindow):
         self.status_label.setText(f"完成 - 成功: {success_count}, 失败: {len(failed_files)}")
 
         # 保存规则
-        if self.settings_manager.get_bool('auto_save'):
+        if self.settings_manager.get_bool('auto_save_rules'):
             self.classifier.save_rules()
 
         # 显示完成对话框
@@ -1666,6 +1828,7 @@ class FileClassifierGUI(QMainWindow):
         self.stop_btn.setEnabled(classifying)
         self.progress_bar.setVisible(classifying)
         self.progress_bar.setValue(0)
+        # self.status_label.setText("就绪")
 
     def closeEvent(self, event):
         """关闭事件处理"""
@@ -1681,7 +1844,12 @@ class FileClassifierGUI(QMainWindow):
             else:
                 event.ignore()
         else:
-            if self.settings_manager.get_bool('auto_save'): self.classifier.save_rules()
+            if self.settings_manager.get_bool('auto_save_settings'):
+                self.save_settings()
+
+            if self.settings_manager.get_bool('auto_save_rules'):
+                self.classifier.save_rules()
+
             event.accept()
 
 
@@ -1689,7 +1857,7 @@ def main():
     app = QApplication(sys.argv)
     app.setStyle('Fusion')
     app.setApplicationName("文件自动分类器")
-    app.setApplicationVersion("1.0.1")
+    app.setApplicationVersion("1.0.2")
     app.setOrganizationName("xuyou & xiaomizha")
     window = FileClassifierGUI()
     window.show()
